@@ -1,6 +1,6 @@
 # Part 3 Notes 
 
-
+Part 3 adds function calls. 
 
 #### Execution Order/Flow
 
@@ -12,6 +12,54 @@ Which continuations do function calls need? The point of passing along continuat
 
 So when we call a function, we use return similarly to break when we evaluate a loop, or more accurately, throw, because there is an associated value. 
 
+What should we use to actually evaluate the function? A function body is effective the same as the outer scope. However, we can't reuse `interpreter` because it returns a value, not state. We should use something similar though. 
+
+What should the result of a function call return, exactly? Obviously, it must be some combination of state and/or value. Ideally, it would return the state of the program when the function was called with all modifications to global variables. If the function call occurred within a variable assignment, that variable should have the function's result as its value. 
+
+```
+var x = 10;
+var y = 20;
+var z = 30;
+
+function foo(p) {
+	z = z + 1;
+	return 5;
+}
+
+var x = funcname(foo);
+
+function main() {
+	var w = 2;
+	funcname(x);
+	w = funcname(x);
+	return w;
+}
+```
+
+```
+# state before function call in "var x = ..."
+(((x y z funcname)(10 20 30 ($funcinfo))))
+
+# state after function call in "var x = ..."
+( ((x y z funcname)(5 20 31 ($funcinfo))) )
+
+# state before first call in main
+( ((w)(2)) ((x y z funcname)(5 20 31 ($funcinfo))) )
+
+# state after the first call in main/before second call
+( ((w)(2)) ((x y z funcname)(5 20 32 ($funcinfo))) )
+
+# state after the second call in main
+( ((w)(5)) ((x y z funcname)(5 20 33 ($funcinfo))) )
+```
+
+So how do we preserve changes to globals, while still correctly handling the return value?
+
+No matter what, the declaration must return a state. Also, "naked" function calls (like the first call in main) must return state. So therefore function calls ought to return state. 
+
+Maybe we can get creative with the return continuation. Like throw, it should return the state and a value. All function calls will return state and value, but only calls from a declaration or assignment will handle the value. 
+
+Return needs to return state, unless it's from `main`. 
 
 #### Glossary
 
