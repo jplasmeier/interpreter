@@ -20,9 +20,21 @@
 	* break - a continuation set to the point to break to
 	* throw - a continuation set to the end of the current try block
 * evaluate-function - evaluates the body of a function, returns state
-	* function-body - the body of a function, a list of expressions
+	* listOfExpressions - the body of a function, a list of expressions
 	* state
 	* return - a continuation set at to the end of the function call
+
+### Function Calls
+
+* call-func-expression - calls a function and binds its return value to a given name
+	* funcname - the name of the function
+	* params - the actual parameters
+	* expr-var-name - the name of the variable to bind the return value to
+	* state
+* call-func-statement - calls a function and ignores its return value
+	* funcname
+	* params
+	* state
 
 ### Expression Evaluation
 
@@ -42,38 +54,62 @@
 	* expr
 	* state
 	* return, continue, break, throw
-* eval-function-call
+* eval-finally
 	* expr
 	* state
-	* return
+	* return, continue, break, throw
 
-### State Operations
+### State Functions
 
 * assign-variable - assigns a value to a variable
-	* varname
-	* assignvalue
+	* name
+	* value
 	* state
 * declare-variable - adds a variable & value to the current state
-	* varname
-	* varvalue
+	* name
+	* value
 	* state
 * define-function - adds a function definition to the current state
-	* funcname
+	* name
 	* params
-	* funcbody
+	* body
 	* state
-* get-value - returns the value resulting from the expression
+* get-value-of-name - given a variable name, return its value
 	* name
 	* state
+* get-value - returns the value resulting from the expression
+	* expr
+	* state
 
-### Function Calls
+### Function Helpers
 
-* call-func - calls a function
-	* name - the name of the function
-	* parameters - the actual parameters
+* bind-parameters - bind the parameters to the arguments in the state
+	* params
+	* args
+	* state
 
-### Expression Parsing
+### Misc Helpers
 
+* atom?
+	* expr
+* isUnary?
+	* expr
+
+### Expression Parsing Helpers
+
+* begin-body
+* try-body
+* catch-body
+* finally-body
+* var-name
+* var-value
+* assign-name
+* assign-value
+* function-call-name
+* function-call-params
+* function-def-name
+* function-def-params
+* function-def-body
 * isReturn?
 * isBegin?
 * isBreak?
@@ -83,6 +119,7 @@
 * isContinue?
 * isTry?
 * isVariableDeclaration?
+* isVariableAssignment?
 * isFunctionCall?
 * isFunctionDefinition?
 

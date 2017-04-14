@@ -57,9 +57,9 @@ So how do we preserve changes to globals, while still correctly handling the ret
 
 No matter what, the declaration must return a state. Also, "naked" function calls (like the first call in main) must return state. So therefore function calls ought to return state. 
 
-Maybe we can get creative with the return continuation. Like throw, it should return the state and a value. All function calls will return state and value, but only calls from a declaration or assignment will handle the value. 
+There are two functions for calling a function as part of an expression and as a statement. The one for calling as an expression has an extra parameter- the name to bind the return value to. When a function returns, it passes back the state and the return value. In the expression version, the return value is bound to the given name within the current frame of the state. In the statement version, the value is ignored and just the state itself is passed back.
 
-Return needs to return state, unless it's from `main`. 
+
 
 #### Glossary
 
