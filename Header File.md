@@ -80,6 +80,10 @@
 * get-value - returns the value resulting from the expression
 	* expr
 	* state
+* pop-frame
+	* state
+* push-frame
+	* state
 
 ### Function Helpers
 
@@ -98,7 +102,13 @@
 ### Expression Parsing Helpers
 
 * begin-body
+* if-condition
+* then-body
+* else-body
+* while-condition
+* while-body
 * try-body
+* catch-block
 * catch-body
 * finally-body
 * var-name

@@ -30,7 +30,7 @@
     (cond
       ((null? expr) (return (get-value 'Main (call-func-expression 'main '() 'Main state)))) ; this only happens when parsing outer level so we know to return a value
       ((isReturn? expr) (return (get-value (return-body expr) state) (pop-frame state))) ; return state and value of return body
-      ((isBegin? expr) (eval-begin (begin-body expr) state return continue break throw))
+      ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (push-frame state) return continue break throw)))
       ((isBreak? expr) (break state))
       ((isThrow? expr) (throw state (get-value (throw-body expr) state)))
       ((isIf? expr) (eval-if expr state return continue break throw))
@@ -99,15 +99,35 @@
 
 (define eval-begin
   (lambda (expr state return continue break throw)
-    ()))
+    (if (null? expr)
+        state
+        (eval-begin (cdr expr) 
+                    (evaluate (car expr) state return continue break throw)
+                    return
+                    continue
+                    break
+                    throw))))
 
 (define eval-if
   (lambda (expr state return continue break throw)
-    ()))
+    (if (get-value (if-condition expr) state)
+        (evaluate (then-body) state return continue break throw)
+        (if (null? (else-body expr))
+            state
+            (evaluate (else-body expr) state return continue break throw)))))
 
 (define eval-while
   (lambda (expr state return continue break throw)
-    ()))
+    (if (get-value (while-condition expr) state)
+        (eval-while expr
+                    (call/cc
+                     (lambda (continue-here)
+                       (evaluate (while-body expr) state return continue-here break throw)))
+                    return
+                    continue
+                    break
+                    throw)
+        state)))
 
 (define eval-try
   (lambda (expr state return continue break throw)
@@ -203,9 +223,16 @@
                                       (get-value (operand2 expr) state)))
       ((eq? (operator expr) '&&) (and (get-value (operand1 expr) state)
                                       (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '!) (not (get-value (operand1 expr) state)
-                                      ))
+      ((eq? (operator expr) '!) (not (get-value (operand1 expr) state)))
       (else (error "Error gettting value.")))))
+
+(define pop-frame
+  (lambda (state)
+    ()))
+
+(define push-frame
+  (lambda (state)
+    ()))
 
 ; Function Helpers 
   
@@ -231,18 +258,19 @@
 ; Expression Parsing Helpers
 
 (define begin-body cdr)
+(define if-condition cadr)
+(define then-body caddr)
+(define else-body (lambda (ex) (if (null? (cdddr ex)) '() (cadddr ex))))
+(define while-condition cadr)
+(define while-body caddr)
 (define try-body cadr)
 (define catch-block caddr)
 (define catch-body (lambda (ex) (caddr (caddr ex))))
 (define finally-body cadddr)
 (define var-name cadr)
-(define var-value 
-  (lambda (expr state)
-    (get-value (caddr expr) state)))
+(define var-value (lambda (expr state) (get-value (caddr expr) state)))
 (define assign-name cadr)
-(define assign-value
-  (lambda (expr state)
-    (get-value (caddr expr) state)))
+(define assign-value (lambda (expr state) (get-value (caddr expr) state)))
 (define function-call-name cadr)
 (define function-call-params cddr)
 (define function-def-name cadr)
@@ -253,50 +281,15 @@
 (define operand1 cadr)
 (define operand2 caddr)
 
-(define isReturn?
-  (lambda (expr)
-    (eq? (operator expr) 'return)))
-
-(define isBegin?
-  (lambda (expr)
-    (eq? (operator expr) 'begin)))
-
-(define isBreak?
-  (lambda (expr)
-    (eq? (operator expr) 'break)))
-
-(define isThrow?
-  (lambda (expr)
-    (eq? (operator expr) 'throw)))
-
-(define isIf?
-  (lambda (expr)
-    (eq? (operator expr) 'if)))
-
-(define isWhile?
-  (lambda (expr)
-    (eq? (operator expr) 'while)))
-
-(define isContinue?
-  (lambda (expr)
-    (eq? (operator expr) 'continue)))
-
-(define isTry?
-  (lambda (expr)
-    (eq? (operator expr) 'try)))
-
-(define isVariableDeclaration?
-  (lambda (expr)
-    (eq? (operator expr) 'var))) 
-
-(define isVariableAssignment?
-  (lambda (expr)
-    (eq? (operator expr) '=)))
-
-(define isFunctionCall?
-  (lambda (expr)
-    (eq? (operator expr) 'funcall)))
-
-(define isFunctionDefinition?
-  (lambda (expr)
-    (eq? (operator expr) 'function)))
+(define isReturn? (lambda (expr) (eq? (operator expr) 'return)))
+(define isBegin? (lambda (expr) (eq? (operator expr) 'begin)))
+(define isBreak? (lambda (expr) (eq? (operator expr) 'break)))
+(define isThrow? (lambda (expr) (eq? (operator expr) 'throw)))
+(define isIf? (lambda (expr) (eq? (operator expr) 'if)))
+(define isWhile? (lambda (expr) (eq? (operator expr) 'while)))
+(define isContinue? (lambda (expr) (eq? (operator expr) 'continue)))
+(define isTry? (lambda (expr) (eq? (operator expr) 'try)))
+(define isVariableDeclaration? (lambda (expr) (eq? (operator expr) 'var)))
+(define isVariableAssignment? (lambda (expr) (eq? (operator expr) '=)))
+(define isFunctionCall? (lambda (expr) (eq? (operator expr) 'funcall)))
+(define isFunctionDefinition? (lambda (expr) (eq? (operator expr) 'function)))
