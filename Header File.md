@@ -1,9 +1,6 @@
 # Header File
 
-```
 "I always thought header files in C were a bit silly, and here I am writing a fake one for a Scheme project." 
-- J. Plasmeier
-```
 
 ### Top-Level Execution
 
@@ -61,14 +58,14 @@
 
 ### State Functions
 
-* assign-variable - assigns a value to a variable
+* assign-variable - assigns a value to a variable (functions). this is done by examining the current state frame first, then the global (final) state frame. 
 	* name
 	* value
-	* state
+	* state-cont
 * declare-variable - adds a variable & value to the current state
 	* name
 	* value
-	* state
+	* state-cont
 * define-function - adds a function definition to the current state
 	* name
 	* params
@@ -85,6 +82,23 @@
 * push-frame
 	* state
 
+### State Helpers/Utilities
+
+* assign-variable-frame - assigns a value to a variable in a given frame
+	* name
+	* value
+	* frame
+* assign-variable-s - assigns a value to a variable (lists)	* name
+	* value
+	* state
+* current-frame - return the current frame
+	* state
+* get-globals - return the state frame containing the globals
+	* state
+* frame-names - return the names on the current frame
+	* state
+* frame-values - return the values on the current frame
+
 ### Function Helpers
 
 * bind-parameters - bind the parameters to the arguments in the state
@@ -98,6 +112,9 @@
 	* expr
 * isUnary?
 	* expr
+* member?
+	* a
+	* l
 
 ### Expression Parsing Helpers
 

@@ -59,7 +59,12 @@ No matter what, the declaration must return a state. Also, "naked" function call
 
 There are two functions for calling a function as part of an expression and as a statement. The one for calling as an expression has an extra parameter- the name to bind the return value to. When a function returns, it passes back the state and the return value. In the expression version, the return value is bound to the given name within the current frame of the state. In the statement version, the value is ignored and just the state itself is passed back.
 
+### Functions left to implement
 
+declare-variable
+get-value-of-name
+pop-frame
+push-frame
 
 #### Glossary
 

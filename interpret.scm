@@ -164,11 +164,38 @@
   
 ; State Functions
 
-; assign-variable - assigns a value to a variable
+; assign-variable - assigns a value to a variable by wrapping the actual call in a function to preserve the continuation
+; this is done by examining the current state frame first, then the global (final) state frame. 
 (define assign-variable
-  (lambda (name value state)
-    ()))
+  (lambda (name value state-cont)
+    (lambda (s) (assign-variable-s name value (state-cont s)))))
 
+; assign-variable-s - assigns the value to a variable by treating state like a list and not a function
+(define assign-variable-s
+  (lambda (name value state)
+    (cond
+      ((member? name (frame-names (current-frame state))) (cons (assign-variable-frame name value (current-frame state))
+                                                                (cdr state)))
+      ((member? name (frame-names (get-globals state))) (append (get-locals state)
+                                                                (cons (assign-variable-frame name value (get-globals state))
+                                                                      '())))
+      (else (error "Attempted to assign to an undeclared variable.")))))
+    
+; assign-variable-frame - assigns the value to a variable on a given frame only
+(define assign-variable-frame
+  (lambda (name value frame)
+    (cond
+      ((eq? (car (frame-names frame)) name) (cons (frame-names frame) 
+                                                  (cons (cons value 
+                                                              (cdr (frame-values frame))) 
+                                                        '())))
+      (else (cons (frame-names frame)
+                  (cons (cons (car (frame-values frame))
+                              (frame-values (assign-variable-frame name value (cons (cdr (frame-names frame))
+                                                                                    (cons (cdr (frame-values frame))
+                                                                                          '())))))
+                        '()))))))
+     
 ; declare-variable - adds a variable & value to the current state
 (define declare-variable
   (lambda (name value state)
@@ -183,9 +210,24 @@
                       state)))
 
 ; get-value-of-name - given a variable name, return its value
+; check the current state frame and globals
 (define get-value-of-name
   (lambda (name state)
     ()))
+
+(define pop-frame
+  (lambda (state)
+    ()))
+
+(define push-frame
+  (lambda (state)
+    ()))
+
+; State Helpers/Utilities
+
+(define frame-names car)
+(define frame-values cadr)
+(define current-frame car)
 
 ; get-value - returns the value resulting from the expression
 (define get-value
@@ -226,13 +268,19 @@
       ((eq? (operator expr) '!) (not (get-value (operand1 expr) state)))
       (else (error "Error gettting value.")))))
 
-(define pop-frame
+; get-globals - return the (final) state frame containing the globals
+(define get-globals
   (lambda (state)
-    ()))
+    (if (null? (cdr state)) 
+        (car state)
+        (get-globals (cdr state)))))
 
-(define push-frame
+; get-locals - return the state frames on top of the globals ("locals")
+(define get-locals
   (lambda (state)
-    ()))
+    (if (null? (cdr state))
+        '()
+        (cons (car state) (get-locals (cdr state))))))
 
 ; Function Helpers 
   
@@ -254,6 +302,13 @@
 (define isUnary?
   (lambda (expr)
     (and (not (null? (cdr expr))) (null? (cddr expr)))))
+
+(define member?
+  (lambda (a l)
+    (cond
+      ((null? l) #f)
+      ((eq? (car l) a) #t)
+      (else (member? a (cdr l))))))
 
 ; Expression Parsing Helpers
 
