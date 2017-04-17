@@ -161,7 +161,7 @@
                       continue ; again
                       break
                       throw))))
-  
+
 ; State Functions
 
 ; assign-variable - assigns a value to a variable by wrapping the actual call in a function to preserve the continuation
@@ -180,7 +180,7 @@
                                                                 (cons (assign-variable-frame name value (get-globals state))
                                                                       '())))
       (else (error "Attempted to assign to an undeclared variable.")))))
-    
+
 ; assign-variable-frame - assigns the value to a variable on a given frame only
 (define assign-variable-frame
   (lambda (name value frame)
@@ -195,11 +195,20 @@
                                                                                     (cons (cdr (frame-values frame))
                                                                                           '())))))
                         '()))))))
-     
+
 ; declare-variable - adds a variable & value to the current state
 (define declare-variable
   (lambda (name value state)
-    ()))
+    (cons (declare-variable-frame name value (current-frame state)) (cdr state))))
+
+; declare-variable-frame - adds a variable and value to a given frame
+(define declare-variable-frame
+  (lambda (name value frame)
+    (if (member? name (frame-names frame))
+        (error "This name is already in use.")
+        (cons (cons name (frame-names frame))
+              (cons (cons value (frame-values frame))
+                    '())))))
 
 ; define-function - adds a function definition to the current state
 (define define-function
@@ -213,7 +222,17 @@
 ; check the current state frame and globals
 (define get-value-of-name
   (lambda (name state)
-    ()))
+    (cond
+      ((member? name (frame-names (current-frame state))) (get-value-of-name-frame name (current-frame state)))
+      ((member? name (frame-names (get-globals state))) (get-value-of-name-frame name (get-globals state)))
+      (else "This name does not exist in the current frame or globals"))))
+
+(define get-value-of-name-frame
+  (lambda (name frame)
+    (if (eq? name (car (frame-names frame)))
+        (car (frame-values frame))
+        (get-value-of-name-frame name (cons (cdr (frame-names frame))
+                                            (cons (cdr (frame-values frame)) '()))))))
 
 (define pop-frame
   (lambda (state)
@@ -246,9 +265,9 @@
       ((eq? (operator expr) '*) (* (get-value (operand1 expr) state)
                                    (get-value (operand2 expr) state)))
       ((eq? (operator expr) '/) (floor (/ (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state))))
+                                          (get-value (operand2 expr) state))))
       ((eq? (operator expr) '%) (modulo (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state)))
+                                        (get-value (operand2 expr) state)))
       ((eq? (operator expr) '>) (> (get-value (operand1 expr) state)
                                    (get-value (operand2 expr) state)))
       ((eq? (operator expr) '<) (< (get-value (operand1 expr) state)
@@ -262,7 +281,7 @@
       ((eq? (operator expr) '!=) (not (eq?(get-value (operand1 expr) state)
                                           (get-value (operand2 expr) state))))
       ((eq? (operator expr) '||) (or (get-value (operand1 expr) state)
-                                      (get-value (operand2 expr) state)))
+                                     (get-value (operand2 expr) state)))
       ((eq? (operator expr) '&&) (and (get-value (operand1 expr) state)
                                       (get-value (operand2 expr) state)))
       ((eq? (operator expr) '!) (not (get-value (operand1 expr) state)))
@@ -283,7 +302,7 @@
         (cons (car state) (get-locals (cdr state))))))
 
 ; Function Helpers 
-  
+
 ; bind-parameters - bind the parameters to the arguments in the state
 (define bind-parameters
   (lambda (params args state)
@@ -292,7 +311,7 @@
       ((null? params) (error "Too many arguments, not enough parameters!"))
       ((null? args) (error "Too many parameters, not enough arguments!"))
       (else (declare-variable (car params) (get-value (car args) state) (bind-parameters (cdr params) (cdr args) state))))))
-      
+
 ; Misc Helpers
 
 (define atom?
