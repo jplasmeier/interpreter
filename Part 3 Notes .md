@@ -61,8 +61,6 @@ There are two functions for calling a function as part of an expression and as a
 
 ### Functions left to implement
 
-declare-variable
-get-value-of-name
 pop-frame
 push-frame
 

@@ -74,29 +74,47 @@
 * get-value-of-name - given a variable name, return its value
 	* name
 	* state
-* get-value - returns the value resulting from the expression
-	* expr
+* pop-frame - pop a frame off of the state, return the new state
 	* state
-* pop-frame
-	* state
-* push-frame
+* push-frame - push a new empty frame on to the state
 	* state
 
-### State Helpers/Utilities
+### State Utilities
 
+* assign-variable-s - assigns a value to a variable (lists)	* name
+	* value
+	* state
 * assign-variable-frame - assigns a value to a variable in a given frame
 	* name
 	* value
 	* frame
-* assign-variable-s - assigns a value to a variable (lists)	* name
+* declare-variable-s - adds a variable & value to the current state
+	* name
 	* value
 	* state
-* current-frame - return the current frame
+* declare-variable-frame - adds a variable and value to a given frame
+	* name
+	* value
+	* frame
+* get-value-of-name-s
+	* name
 	* state
+* get-value-of-name-frame
+	* name
+	* frame
 * get-globals - return the state frame containing the globals
 	* state
-* frame-names - return the names on the current frame
+* get-locals - return the state frames on top of the globals ("locals")
 	* state
+* pop-frame-s - pop a frame off of the state, return the new state
+	* state
+* push-frame-s - push a new empty frame on to the state
+	* state
+
+### State Helpers
+
+* current-frame - return the current frame
+* frame-names - return the names on the current frame
 * frame-values - return the values on the current frame
 
 ### Function Helpers
@@ -106,8 +124,11 @@
 	* args
 	* state
 
-### Misc Helpers
+### Misc Helpers/Utilities
 
+* get-value
+	* expr
+	* state
 * atom?
 	* expr
 * isUnary?
@@ -137,6 +158,10 @@
 * function-def-name
 * function-def-params
 * function-def-body
+* function-ref-body
+* operator
+* operand1
+* operand2
 * isReturn?
 * isBegin?
 * isBreak?
