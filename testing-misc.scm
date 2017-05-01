@@ -27,7 +27,12 @@
 (test-from-file "testcases/MyTest5.txt" 10)
 ; function call in return
 (test-from-file "testcases/MyTest6.txt" 15)
-
 ; function call in global declaration
 (test-from-file "testcases/MyTest7.txt" 9)
+; function call with if statement called in global declaration
+(test-from-file "testcases/MyTest8.txt" 15)
+; function call in declaration inside main
+;(test-from-file "testcases/MyTest9.txt" 6)
+; while loops
+(test-from-file "testcases/MyTest10.txt" 0)
 

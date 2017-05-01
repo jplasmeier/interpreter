@@ -17,6 +17,6 @@
 (string-append "test 15: " (if (eq? (interpret "testcases/Test3-15.txt" ) 87) "passed" "failed"))
 (string-append "test 16: " (if (eq? (interpret "testcases/Test3-16.txt" ) 64) "passed" "failed"))
 (string-append "test 17: " (if (eq? (interpret "testcases/Test3-17.txt" ) (error)) "passed" "failed")) ; error: b out of scope
-(string-append "test 18: " (if (eq? (interpret "testcases/Test3-18.txt" ) 125) "passed" "failed")) 
-(string-append "test 19: " (if (eq? (interpret "testcases/Test3-19.txt" ) 100) "passed" "failed")) 
-(string-append "test 20: " (if (eq? (interpret "testcases/Test3-20.txt" ) 2000400) "passed" "failed")) 
+(string-append "test 18: " (if (eq? (interpret "testcases/Test3-18.txt" ) 125) "passed" "failed"))
+(string-append "test 19: " (if (eq? (interpret "testcases/Test3-19.txt" ) 100) "passed" "failed"))
+(string-append "test 20: " (if (eq? (interpret "testcases/Test3-20.txt" ) 2000400) "passed" "failed"))
