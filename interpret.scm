@@ -2,7 +2,7 @@
 ; J. Plasmeier - jgp45@case.edu
 
 ; load the parser
-(load "functionParser.scm")
+(load "classParser.scm")
 
 (define bool?
   (lambda (a)
@@ -17,6 +17,16 @@
               "TRUE"
               "FALSE")
           retval))))
+
+; interpret-classess - add classes from the outer level 
+(define interpret-classes
+  (lambda (listOfClasses state return break continue throw)
+    (if (null? listOfClasses)
+        state
+        (interpret-classes (cdr listOfClasses)
+                           (add-class (car listOfClasses) state return break continue throw)
+                           return break continue throw))))
+                           
 
 ; interpreter - takes a list of expressions and evaluates them
 (define interpreter
