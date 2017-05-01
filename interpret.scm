@@ -466,3 +466,26 @@
 (define isVariableAssignment? (lambda (expr) (eq? (operator expr) '=)))
 (define isFunctionCall? (lambda (expr) (eq? (operator expr) 'funcall)))
 (define isFunctionDefinition? (lambda (expr) (eq? (operator expr) 'function)))
+
+(define isClass? (lambda (expr) (eq?(operator expr) 'class)))
+(define isDot? (lambda (expr) (eq? (operator expr) 'dot)))
+(define isStaticFunctionDefinition? (lambda (expr) (eq? (operator expr) 'static-function)))
+(define isAbstractFunctionDefinition? (lambda (expr) (eq? (operator expr) 'abstract-function)))
+(define isStaticVarDeclaration? (lambda (expr) (eq? (operator expr) 'static-var)))
+(define isClassCall? (lambda (expr) (eq? (operator expr) 'new)))
+
+(define extends? (lambda (expr) (if (isClass? expr) (not (null? (operand2 expr))) #f)))
+(define isAnyFunctionDefinition? (lambda (expr) (or
+                                                 (isFunctionDefinition? expr)
+                                                 (isStaticFunctionDefinition? expr)
+                                                 (isAbstractFunctionDefinition? expr))))
+(define isAnyVarDeclaration? (lambda (expr) (or
+                                             (isVariableDeclaration? expr)
+                                             (isStaticVarDeclaration? expr))))
+
+(define class-def-name cadr)
+(define class-def-extends (lambda (expr) (car (cdaddr expr))))
+(define class-def-body cadddr)
+(define class-call-name cadr)
+(define dot-reference cadr)
+(define dot-function caddr)
