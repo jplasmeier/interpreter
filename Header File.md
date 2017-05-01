@@ -159,6 +159,8 @@
 * function-def-params
 * function-def-body
 * function-ref-body
+* function-ref-args
+* return-body
 * operator
 * operand1
 * operand2

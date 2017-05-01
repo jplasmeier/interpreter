@@ -1,0 +1,14 @@
+function update() {
+  g = g + 1;
+  return g;
+}
+
+var g = 0;
+
+function main() {
+  update();
+  var y = update();
+  y = update();
+  update();
+  return g;
+}

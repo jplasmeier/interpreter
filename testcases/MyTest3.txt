@@ -1,0 +1,10 @@
+function addme(a, b) {
+  var temp = a + b;
+  return temp;
+}
+
+function main() {
+  var x = addme(4,5);
+  var y = addme(addme(1,2), addme(3,4));
+  return y;
+}

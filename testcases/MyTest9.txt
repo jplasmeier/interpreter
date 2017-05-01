@@ -1,0 +1,15 @@
+function min(x, y, z) {
+  if (x < y) {
+    return x;
+  }
+}
+
+var x = 10;
+var y = 20;
+var z = 30;
+
+var min1 = min(z,y,x);
+
+function main() {
+  return min1;
+}

@@ -4,10 +4,19 @@
 ; load the parser
 (load "functionParser.scm")
 
+(define bool?
+  (lambda (a)
+    (eq? #t (or (not a) a))))
+
 ; interpret - parse a file and interpret it
 (define interpret
   (lambda (file)
-    (interpreter (parser file) (lambda (s) s))))
+    (let ((retval (interpreter (parser file) (lambda (s) s))))
+      (if (bool? retval)
+          (if retval
+              "TRUE"
+              "FALSE")
+          retval))))
 
 ; interpreter - takes a list of expressions and evaluates them
 (define interpreter
@@ -37,24 +46,24 @@
         (car l))))
 
 ; evaluate - takes an expression and evaluates it
-(define evaluate
+(define evaluate 
   (lambda (expr state return continue break throw)
     (cond
-      ((null? expr) (return (get-value 'Main (call-func-expression 'main '() 'Main state)))) ; this only happens when parsing outer level so we know to return a value
+      ((null? expr) (return (get-value 'Main (call-func-expression 'main '() 'Main declare-variable state)))) ; this only happens when parsing outer level so we know to return a value
       ((isReturn? expr) (return (get-value (return-body expr) state) (pop-frame state))) ; return state and value of return body
-      ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (push-frame state) return continue break throw)))
+      ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw)))
       ((isBreak? expr) (break state))
       ((isThrow? expr) (throw state (get-value (throw-body expr) state)))
       ((isIf? expr) (eval-if expr state return continue break throw))
       ((isWhile? expr) (call/cc
                         (lambda (break-here)
-                          (eval-while expr state return continue break-here throw))))
+                          (eval-while expr (copy-frame state) return continue break-here throw))))
       ((isContinue? expr) (continue state))
       ((isTry? expr) (eval-try expr state return continue break throw))
       ((isVariableDeclaration? expr) (eval-declare-variable expr state))
       ((isVariableAssignment? expr) (eval-assign-variable expr state))
       ((isFunctionCall? expr) (call-func-statement (function-call-name expr)
-                                                   (function-call-params expr)
+                                                   (function-call-args expr)
                                                    state))
       ((isFunctionDefinition? expr) (define-function 
                                       (function-def-name expr)
@@ -67,36 +76,39 @@
 (define evaluate-function
   (lambda (listOfExpressions state return)
     (letrec ((loop (lambda (listOfExpressions state return)
-                     (loop (cdr listOfExpressions) (evaluate (car listOfExpressions)
-                                                             state
-                                                             return
-                                                             (lambda (e) (error "Error: continue found outside of a while body"))
-                                                             (lambda (e) (error "Error: break called outside of a scoped block"))
-                                                             (lambda (t e) (error "Error: throw called outside of a try block"))) return)
-                     )))
+                     (if (null? listOfExpressions)
+                         (return '() state)
+                         (loop (cdr listOfExpressions) (evaluate (car listOfExpressions)
+                                                                 state
+                                                                 return
+                                                                 (lambda (e) (error "Error: continue found outside of a while body"))
+                                                                 (lambda (e) (error "Error: break called outside of a scoped block"))
+                                                                 (lambda (t e) (error "Error: throw called outside of a try block"))) return)
+                         ))))
       (loop listOfExpressions state return)
       )))
 
 ; call-func-expression - calls a function and binds its return value to a given name
+; apply should be either declare-variable or assign-variable
 (define call-func-expression
-  (lambda (funcname params expr-var-name state)
+  (lambda (funcname args expr-var-name apply state)
     (call/cc
      (lambda (return-here) ; when this function returns
        (evaluate-function (function-ref-body (get-value-of-name funcname state)) 
-                          (bind-parameters params
-                                           (function-ref-args (get-value-of-name funcname state))
+                          (bind-parameters args
+                                           (function-ref-params (get-value-of-name funcname state))
                                            (push-frame state))
-                          (lambda (value state) (return-here (declare-variable expr-var-name value state))) ; when this function returns, apply its value to the state
+                          (lambda (value state) (return-here (apply expr-var-name value state))) ; when this function returns, apply its value to the state
                           )))))
 
 ; call-func-statement - calls a function and ignores its return value
 (define call-func-statement
-  (lambda (funcname params state)
+  (lambda (funcname args state)
     (call/cc
      (lambda (return-here)
        (evaluate-function (function-ref-body (get-value-of-name funcname state))
-                          (bind-parameters params
-                                           (function-ref-args (get-value-of-name funcname state))
+                          (bind-parameters args
+                                           (function-ref-params (get-value-of-name funcname state))
                                            (push-frame state))
                           (lambda (value state) (return-here state)) ; when the function returns, just return the state
                           )))))
@@ -114,12 +126,15 @@
                     break
                     throw))))
 
+; eval-declare-variable - evaluate a variable declaration
+; must account for function calls affecting globals
 (define eval-declare-variable
   (lambda (expr state)
     (if (and (not (atom? (var-value-term expr))) (eq? (car (var-value-term expr)) 'funcall))
         (call-func-expression (function-call-name (var-value-term expr))
-                              (function-call-params (var-value-term expr))
+                              (function-call-args (var-value-term expr))
                               (var-name expr)
+                              declare-variable
                               state)
         (declare-variable (var-name expr)
                           (var-value expr state)
@@ -129,8 +144,9 @@
   (lambda (expr state)
     (if (and (not (atom? (assign-value-term expr))) (eq? (car (assign-value-term expr)) 'funcall))
         (call-func-expression (function-call-name (assign-value-term expr))
-                              (function-call-params (assign-value-term expr))
+                              (function-call-args (assign-value-term expr))
                               (assign-name expr)
+                              assign-variable
                               state)
         (assign-variable (assign-name expr) 
                          (assign-value expr state) 
@@ -150,17 +166,18 @@
         (eval-while expr
                     (call/cc
                      (lambda (continue-here)
-                       (evaluate (while-body expr) state return continue-here break throw)))
+                       ;(pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw))
+                       (eval-begin (begin-body (while-body expr)) state return continue-here break throw)))
                     return
                     continue
                     break
                     throw)
-        state)))
+        (pop-frame state))))
 
 (define eval-try
   (lambda (expr state return continue break throw)
     (if (null? catch-block)
-        (eval-finally (finally-body expr)
+        (eval-begin (finally-body expr)
                       (eval-begin (try-body expr)
                                   (push-frame state)
                                   return
@@ -171,7 +188,7 @@
                       continue ; same deal here
                       break
                       throw)
-        (eval-finally (finally-body expr)
+        (eval-begin (finally-body expr)
                       (push-frame (call/cc
                                    (lambda (throw-here)
                                      (pop-frame (eval-begin (try-body expr)
@@ -216,6 +233,10 @@
 (define get-value-of-name
   (lambda (name state)
     (get-value-of-name-s name (state e-s))))
+
+(define copy-frame
+  (lambda (state-cont)
+    (lambda (s) (copy-frame-s (state-cont s)))))
 
 ; pop-frame - pop a frame off of the state, return the new state
 (define pop-frame
@@ -275,7 +296,7 @@
     (cond
       ((member? name (frame-names (current-frame state))) (get-value-of-name-frame name (current-frame state)))
       ((member? name (frame-names (get-globals state))) (get-value-of-name-frame name (get-globals state)))
-      (else "This name does not exist in the current frame or globals"))))
+      (else (error (begin (display state) (begin (display name) "This name does not exist in the current frame or globals")))))))
 
 ; get-value-of-name-frame - get the value of a name from a given frame
 (define get-value-of-name-frame
@@ -299,6 +320,11 @@
         '()
         (cons (car state) (get-locals (cdr state))))))
 
+; copy-frame-s - copy the last frame into a new frame
+(define copy-frame-s
+  (lambda (state)
+    (cons (car state) state)))
+
 ; pop-frame-s - pop a frame off of the state, return the new state
 (define pop-frame-s
   (lambda (state)
@@ -319,12 +345,18 @@
 
 ; bind-parameters - bind the parameters to the arguments in the state
 (define bind-parameters
-  (lambda (params args state)
+  (lambda (args params state)
     (cond
       ((and (null? params) (null? args)) state)
       ((null? params) (error "Too many arguments, not enough parameters!"))
       ((null? args) (error "Too many parameters, not enough arguments!"))
-      (else (declare-variable (car params) (get-value (car args) state) (bind-parameters (cdr params) (cdr args) state))))))
+      (else (if (and (not (atom? (car args))) (isFunctionCall? (car args)))
+                (bind-parameters (cdr args) (cdr params) (call-func-expression (function-call-name (car args))
+                                                                               (function-call-args (car args))
+                                                                               (car params)
+                                                                               declare-variable
+                                                                               state))
+                (bind-parameters (cdr args) (cdr params) (declare-variable (car params) (get-value (car args) (pop-frame state)) state)))))))
 
 ; Misc Helpers/Utilities
 
@@ -337,6 +369,12 @@
       ((eq? 'true expr) #t)
       ((eq? 'false expr) #f)
       ((atom? expr) (get-value-of-name expr state))
+      ((isFunctionCall? expr) (get-value 'TEMP (call-func-expression 
+                                                (function-call-name expr)
+                                                (function-call-args expr)
+                                                'TEMP
+                                                declare-variable
+                                                state)))
       ((eq? (operator expr) '+) (+ (get-value (operand1 expr) state)
                                    (get-value (operand2 expr) state)))
       ((eq? (operator expr) '-) (if (isUnary? expr)
@@ -404,12 +442,12 @@
 (define assign-value-term caddr)
 (define assign-value (lambda (expr state) (get-value (assign-value-term expr) state)))
 (define function-call-name cadr)
-(define function-call-params cddr)
+(define function-call-args cddr)
 (define function-def-name cadr)
 (define function-def-params caddr)
 (define function-def-body cadddr)
 (define function-ref-body cadr)
-(define function-ref-args car)
+(define function-ref-params car)
 (define return-body cadr)
 
 (define operator car)

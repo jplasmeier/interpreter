@@ -66,7 +66,7 @@ push-frame
 
 #### Glossary
 
-* Actual Parameter: the actual value that is passed into the method by a caller.
+* Actual Parameter: the actual argument value that is passed into the method by a caller.
 * Argument: the data passed into the function call.
 * Expression: unit of execution that returns a value
 * Formal Parameter: the identifier used in a method to stand for the value that is passed into the method by a caller.

@@ -1,0 +1,9 @@
+function plusfive(a) {
+  return a + 5;
+}
+
+function main() {
+  var x = 5;
+  x = plusfive(x);
+  return plusfive(x);
+}

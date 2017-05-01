@@ -1,0 +1,10 @@
+function addgls(a, b) {
+  gls = a + b;  
+}
+
+var gls = 0;
+
+function main() {
+  addgls(4,5);
+  return gls;
+}
