@@ -1,5 +1,5 @@
 ; EECS 345 Programming Project
-; J. Plasmeier - jgp45@case.edu
+; Justin Plasmeier, Quinten Hutchison, Jacob Kesseler
 
 ; load the parser
 (load "classParser.scm")
@@ -47,7 +47,7 @@
        (letrec ((loop (lambda (listOfExpressions state)
                         (loop (safecdr listOfExpressions) (evaluate (safecar listOfExpressions)
                                                                 state
-                                                                return-main
+                                                                (lambda (v s) (return-main v))
                                                                 (lambda (e) (error "Error: continue found outside of a while body"))
                                                                 (lambda (e) (error "Error: break called outside of a scoped block"))
                                                                 (lambda (t e) (error "Error: throw called outside of a try block"))
@@ -72,7 +72,7 @@
   (lambda (expr state return continue break throw class-table)
     (cond
       ((null? expr) state) ; this only happens when parsing outer level so we know to return a value
-      ((isReturn? expr) (return (get-value (return-body expr) state class-table))) ; return state and value of return body
+      ((isReturn? expr) (return (get-value (return-body expr) state class-table) state)) ; return state and value of return body
       ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw class-table)))
       ((isBreak? expr) (break state))
       ((isThrow? expr) (throw state (get-value (throw-body expr) state class-table)))
@@ -105,8 +105,8 @@
   (lambda (listOfExpressions state return class-table)
     (letrec ((loop (lambda (listOfExpressions state return)
                      (if (null? listOfExpressions)
-                         (return '() state)
-                         (loop (cdr listOfExpressions) (evaluate (car listOfExpressions)
+                         (return '())
+                          (loop (cdr listOfExpressions) (evaluate (car listOfExpressions)
                                                                  state
                                                                  return
                                                                  (lambda (e) (error "Error: continue found outside of a while body"))
@@ -126,7 +126,8 @@
        (evaluate-function (function-ref-body (get-value-of-name funcname state)) 
                           (bind-parameters args
                                            (function-ref-params (get-value-of-name funcname state))
-                                           (push-frame state))
+                                           (push-frame state)
+                                           class-table)
                           (lambda (value state) (return-here (apply expr-var-name value state))) ; when this function returns, apply its value to the state
                           class-table)))))
 
@@ -138,7 +139,8 @@
        (evaluate-function (function-ref-body (get-value-of-name funcname state))
                           (bind-parameters args
                                            (function-ref-params (get-value-of-name funcname state))
-                                           (push-frame state))
+                                           (push-frame state)
+                                           class-table)
                           (lambda (value state) (return-here state)) ; when the function returns, just return the state
                           class-table)))))
 
@@ -388,7 +390,7 @@
 
 ; bind-parameters - bind the parameters to the arguments in the state
 (define bind-parameters
-  (lambda (args params state)
+  (lambda (args params state class-table)
     (cond
       ((and (null? params) (null? args)) state)
       ((null? params) (error "Too many arguments, not enough parameters!"))
@@ -399,10 +401,21 @@
                                                                                (car params)
                                                                                declare-variable
                                                                                state
-                                                                               class-table))
-                (bind-parameters (cdr args) (cdr params) (declare-variable (car params) (get-value (car args) (pop-frame state) class-table) state)))))))
+                                                                               class-table) class-table)
+                (bind-parameters (cdr args) (cdr params) (declare-variable (car params) (get-value (car args) (pop-frame state) class-table) state) class-table))))))
 
 ; Misc Helpers/Utilities
+(define eval-dot-funcall
+  (lambda (dotexpr args apply expr-var-name state class-table)
+    (call/cc
+     (lambda (return-here)
+       (evaluate-function (function-ref-body (get-value dotexpr state class-table))
+                          (bind-parameters args
+                                           (function-ref-params (get-value dotexpr state class-table))
+                                           (push-frame state)
+                                           class-table)
+                          (lambda (value state) (return-here (apply expr-var-name value state)))
+                          class-table)))))
 
 ; get-value - returns the value resulting from the expression
 (define get-value
@@ -413,14 +426,23 @@
       ((eq? 'true expr) #t)
       ((eq? 'false expr) #f)
       ((atom? expr) (get-value-of-name expr state))
-      ((isFunctionCall? expr) (get-value 'TEMP (call-func-expression 
+      ((isFunctionCall? expr) (if (isDot? (function-call-name expr))
+                                  (get-value 'DTEMP (eval-dot-funcall 
+                                                     (function-call-name expr)
+                                                     (function-call-args expr)
+                                                     declare-variable
+                                                     'DTEMP
+                                                     state
+                                                     class-table)
+                                             class-table)
+                                  (get-value 'TEMP (call-func-expression 
                                                 (function-call-name expr)
                                                 (function-call-args expr)
                                                 'TEMP
                                                 declare-variable
                                                 state
                                                 class-table)
-                                         class-table))
+                                         class-table)))
       ((isDot? expr) (get-value-of-name-s (dot-member expr) (get-value (dot-instance expr) state class-table)))
       ((eq? (operator expr) '+) (+ (get-value (operand1 expr) state class-table)
                                    (get-value (operand2 expr) state class-table)))
