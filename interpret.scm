@@ -10,8 +10,10 @@
 
 ; interpret - parse a file and interpret it
 (define interpret
-  (lambda (file)
-    (let ((retval (interpreter (parser file) (lambda (s) s))))
+  (lambda (file class-name)
+    (let* ((class-table (interpret-classes (parser file) (lambda (x) x)))
+           (main-eval (function-ref-body (get-value-of-name-s 'main (get-value (string->symbol class-name) class-table class-table))))
+           (retval (interpreter main-eval (lambda (s) s) class-table)))
       (if (bool? retval)
           (if retval
               "TRUE"
@@ -20,17 +22,26 @@
 
 ; interpret-classess - add classes from the outer level 
 (define interpret-classes
-  (lambda (listOfClasses state return break continue throw)
+  (lambda (listOfClasses state)
     (if (null? listOfClasses)
         state
         (interpret-classes (cdr listOfClasses)
-                           (add-class (car listOfClasses) state return break continue throw)
-                           return break continue throw))))
-                           
+                           (add-class (car listOfClasses) state)))))
+
+; add-class - adds a class definition to the class-table
+(define add-class
+  (lambda (statement class-table)
+    (if (extends? statement)
+        (declare-variable (class-def-name statement) 
+                          (append ((eval-begin (class-def-body statement) (lambda (x) x) 1 1 1 1 class-table) e-s) (cons (class-def-extends statement) '()))
+                          class-table)
+        (declare-variable (class-def-name statement)
+                          (append ((eval-begin (class-def-body statement) (lambda (x) x) 1 1 1 1 class-table) e-s) '(()))
+                          class-table))))
 
 ; interpreter - takes a list of expressions and evaluates them
 (define interpreter
-  (lambda (listOfExpressions state)
+  (lambda (listOfExpressions state class-table)
     (call/cc
      (lambda (return-main)
        (letrec ((loop (lambda (listOfExpressions state)
@@ -39,7 +50,8 @@
                                                                 return-main
                                                                 (lambda (e) (error "Error: continue found outside of a while body"))
                                                                 (lambda (e) (error "Error: break called outside of a scoped block"))
-                                                                (lambda (t e) (error "Error: throw called outside of a try block"))))
+                                                                (lambda (t e) (error "Error: throw called outside of a try block"))
+                                                                class-table))
                         )))
          (loop listOfExpressions state))))))
 
@@ -57,34 +69,40 @@
 
 ; evaluate - takes an expression and evaluates it
 (define evaluate 
-  (lambda (expr state return continue break throw)
+  (lambda (expr state return continue break throw class-table)
     (cond
-      ((null? expr) (return (get-value 'Main (call-func-expression 'main '() 'Main declare-variable state)))) ; this only happens when parsing outer level so we know to return a value
-      ((isReturn? expr) (return (get-value (return-body expr) state) (pop-frame state))) ; return state and value of return body
-      ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw)))
+      ((null? expr) state) ; this only happens when parsing outer level so we know to return a value
+      ((isReturn? expr) (return (get-value (return-body expr) state class-table))) ; return state and value of return body
+      ((isBegin? expr) (pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw class-table)))
       ((isBreak? expr) (break state))
-      ((isThrow? expr) (throw state (get-value (throw-body expr) state)))
-      ((isIf? expr) (eval-if expr state return continue break throw))
+      ((isThrow? expr) (throw state (get-value (throw-body expr) state class-table)))
+      ((isIf? expr) (eval-if expr state return continue break throw class-table))
       ((isWhile? expr) (call/cc
                         (lambda (break-here)
-                          (eval-while expr (copy-frame state) return continue break-here throw))))
+                          (eval-while expr (copy-frame state) return continue break-here throw class-table))))
       ((isContinue? expr) (continue state))
-      ((isTry? expr) (eval-try expr state return continue break throw))
-      ((isVariableDeclaration? expr) (eval-declare-variable expr state))
-      ((isVariableAssignment? expr) (eval-assign-variable expr state))
+      ((isTry? expr) (eval-try expr state return continue break throw class-table))
+      ((isVariableDeclaration? expr) (eval-declare-variable expr state class-table))
+      ((isVariableAssignment? expr) (eval-assign-variable expr state class-table))
       ((isFunctionCall? expr) (call-func-statement (function-call-name expr)
                                                    (function-call-args expr)
-                                                   state))
+                                                   state
+                                                   class-table))
       ((isFunctionDefinition? expr) (define-function 
                                       (function-def-name expr)
                                       (function-def-params expr) 
                                       (function-def-body expr) 
                                       state))
-      (else (error "Reached unexpected expression while evaluating")))))
+      ((isStaticFunctionDefinition? expr) (define-function 
+                                      (function-def-name expr)
+                                      (function-def-params expr) 
+                                      (function-def-body expr) 
+                                      state))
+      (else (error "Reached unexpected expression while evaluating: " expr)))))
 
 ; evaluate-function - evaluates the body of a function and returns a state
 (define evaluate-function
-  (lambda (listOfExpressions state return)
+  (lambda (listOfExpressions state return class-table)
     (letrec ((loop (lambda (listOfExpressions state return)
                      (if (null? listOfExpressions)
                          (return '() state)
@@ -93,7 +111,8 @@
                                                                  return
                                                                  (lambda (e) (error "Error: continue found outside of a while body"))
                                                                  (lambda (e) (error "Error: break called outside of a scoped block"))
-                                                                 (lambda (t e) (error "Error: throw called outside of a try block"))) return)
+                                                                 (lambda (t e) (error "Error: throw called outside of a try block"))
+                                                                 class-table) return)
                          ))))
       (loop listOfExpressions state return)
       )))
@@ -101,7 +120,7 @@
 ; call-func-expression - calls a function and binds its return value to a given name
 ; apply should be either declare-variable or assign-variable
 (define call-func-expression
-  (lambda (funcname args expr-var-name apply state)
+  (lambda (funcname args expr-var-name apply state class-table)
     (call/cc
      (lambda (return-here) ; when this function returns
        (evaluate-function (function-ref-body (get-value-of-name funcname state)) 
@@ -109,11 +128,11 @@
                                            (function-ref-params (get-value-of-name funcname state))
                                            (push-frame state))
                           (lambda (value state) (return-here (apply expr-var-name value state))) ; when this function returns, apply its value to the state
-                          )))))
+                          class-table)))))
 
 ; call-func-statement - calls a function and ignores its return value
 (define call-func-statement
-  (lambda (funcname args state)
+  (lambda (funcname args state class-table)
     (call/cc
      (lambda (return-here)
        (evaluate-function (function-ref-body (get-value-of-name funcname state))
@@ -121,71 +140,80 @@
                                            (function-ref-params (get-value-of-name funcname state))
                                            (push-frame state))
                           (lambda (value state) (return-here state)) ; when the function returns, just return the state
-                          )))))
+                          class-table)))))
 
 ; Expression Evaluation
 
 (define eval-begin
-  (lambda (expr state return continue break throw)
+  (lambda (expr state return continue break throw class-table)
     (if (null? expr)
         state
         (eval-begin (cdr expr) 
-                    (evaluate (car expr) state return continue break throw)
+                    (evaluate (car expr) state return continue break throw class-table)
                     return
                     continue
                     break
-                    throw))))
+                    throw
+                    class-table))))
 
 ; eval-declare-variable - evaluate a variable declaration
 ; must account for function calls affecting globals
 (define eval-declare-variable
-  (lambda (expr state)
-    (if (and (not (atom? (var-value-term expr))) (eq? (car (var-value-term expr)) 'funcall))
-        (call-func-expression (function-call-name (var-value-term expr))
-                              (function-call-args (var-value-term expr))
-                              (var-name expr)
-                              declare-variable
-                              state)
-        (declare-variable (var-name expr)
-                          (var-value expr state)
-                          state))))
+  (lambda (expr state class-table)
+    (cond
+      ((atom? (var-value-term expr)) (declare-variable (var-name expr)
+                                                       (var-value expr state class-table)
+                                                       state))
+      ((eq? (car (var-value-term expr)) 'funcall) (call-func-expression (function-call-name (var-value-term expr))
+                                                                        (function-call-args (var-value-term expr))
+                                                                        (var-name expr)
+                                                                        declare-variable
+                                                                        state
+                                                                        class-table))
+      ((isClass? (var-value-term expr)) (declare-variable (var-name expr) (get-value (new-name (var-value-term expr)) class-table class-table)))
+      ((isClassCall? (var-value-term expr)) (declare-variable (var-name expr) (get-value (class-call-name (var-value-term expr)) class-table class-table) state))
+      (else (declare-variable (var-name expr)
+                          (var-value expr state class-table)
+                          state)))))
+    
 
 (define eval-assign-variable
-  (lambda (expr state)
+  (lambda (expr state class-table)
     (if (and (not (atom? (assign-value-term expr))) (eq? (car (assign-value-term expr)) 'funcall))
         (call-func-expression (function-call-name (assign-value-term expr))
                               (function-call-args (assign-value-term expr))
                               (assign-name expr)
                               assign-variable
-                              state)
+                              state
+                              class-table)
         (assign-variable (assign-name expr) 
-                         (assign-value expr state) 
+                         (assign-value expr state class-table) 
                          state))))
 
 (define eval-if
-  (lambda (expr state return continue break throw)
-    (if (get-value (if-condition expr) state)
-        (evaluate (then-body expr) state return continue break throw)
+  (lambda (expr state return continue break throw class-table)
+    (if (get-value (if-condition expr) state class-table)
+        (evaluate (then-body expr) state return continue break throw class-table)
         (if (null? (else-body expr))
             state
-            (evaluate (else-body expr) state return continue break throw)))))
+            (evaluate (else-body expr) state return continue break throw class-table)))))
 
 (define eval-while
-  (lambda (expr state return continue break throw)
-    (if (get-value (while-condition expr) state)
+  (lambda (expr state return continue break throw class-table)
+    (if (get-value (while-condition expr) state class-table)
         (eval-while expr
                     (call/cc
                      (lambda (continue-here)
-                       ;(pop-frame (eval-begin (begin-body expr) (copy-frame state) return continue break throw))
-                       (eval-begin (begin-body (while-body expr)) state return continue-here break throw)))
+                       (eval-begin (begin-body (while-body expr)) state return continue-here break throw class-table)))
                     return
                     continue
                     break
-                    throw)
+                    throw
+                    class-table)
         (pop-frame state))))
 
 (define eval-try
-  (lambda (expr state return continue break throw)
+  (lambda (expr state return continue break throw class-table)
     (if (null? catch-block)
         (eval-begin (finally-body expr)
                       (eval-begin (try-body expr)
@@ -193,11 +221,13 @@
                                   return
                                   continue ; do these need to also have a frame pushed? 
                                   break    ; on part 2 they did but idk if needed
-                                  throw)
+                                  throw
+                                  class-table)
                       return
                       continue ; same deal here
                       break
-                      throw)
+                      throw
+                      class-table)
         (eval-begin (finally-body expr)
                       (push-frame (call/cc
                                    (lambda (throw-here)
@@ -207,15 +237,18 @@
                                                             continue ; again
                                                             break
                                                             (lambda (t e) (throw-here (eval-begin (catch-body expr)
-                                                                                                  (get-value e t)
+                                                                                                  (get-value e t class-table)
                                                                                                   return
                                                                                                   continue ; again
                                                                                                   break
-                                                                                                  throw))))))))
+                                                                                                  throw
+                                                                                                  class-table)))
+                                                            class-table)))))
                       return
                       continue ; again
                       break
-                      throw))))
+                      throw
+                      class-table))))
 
 ; State Functions
 
@@ -365,14 +398,15 @@
                                                                                (function-call-args (car args))
                                                                                (car params)
                                                                                declare-variable
-                                                                               state))
-                (bind-parameters (cdr args) (cdr params) (declare-variable (car params) (get-value (car args) (pop-frame state)) state)))))))
+                                                                               state
+                                                                               class-table))
+                (bind-parameters (cdr args) (cdr params) (declare-variable (car params) (get-value (car args) (pop-frame state) class-table) state)))))))
 
 ; Misc Helpers/Utilities
 
 ; get-value - returns the value resulting from the expression
 (define get-value
-  (lambda (expr state)
+  (lambda (expr state class-table)
     (cond
       ((null? expr) '())
       ((number? expr) expr)
@@ -384,37 +418,40 @@
                                                 (function-call-args expr)
                                                 'TEMP
                                                 declare-variable
-                                                state)))
-      ((eq? (operator expr) '+) (+ (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state)))
+                                                state
+                                                class-table)
+                                         class-table))
+      ((isDot? expr) (get-value-of-name-s (dot-member expr) (get-value (dot-instance expr) state class-table)))
+      ((eq? (operator expr) '+) (+ (get-value (operand1 expr) state class-table)
+                                   (get-value (operand2 expr) state class-table)))
       ((eq? (operator expr) '-) (if (isUnary? expr)
-                                    (- (get-value (operand1 expr) state))
-                                    (- (get-value (operand1 expr) state)
-                                       (get-value (operand2 expr) state))))
-      ((eq? (operator expr) '*) (* (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '/) (floor (/ (get-value (operand1 expr) state)
-                                          (get-value (operand2 expr) state))))
-      ((eq? (operator expr) '%) (modulo (get-value (operand1 expr) state)
-                                        (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '>) (> (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '<) (< (get-value (operand1 expr) state)
-                                   (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '>=) (>= (get-value (operand1 expr) state)
-                                     (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '<=) (<= (get-value (operand1 expr) state)
-                                     (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '==) (eq? (get-value (operand1 expr) state)
-                                      (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '!=) (not (eq?(get-value (operand1 expr) state)
-                                          (get-value (operand2 expr) state))))
-      ((eq? (operator expr) '||) (or (get-value (operand1 expr) state)
-                                     (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '&&) (and (get-value (operand1 expr) state)
-                                      (get-value (operand2 expr) state)))
-      ((eq? (operator expr) '!) (not (get-value (operand1 expr) state)))
-      (else (error "Error gettting value.")))))
+                                    (- (get-value (operand1 expr) state class-table))
+                                    (- (get-value (operand1 expr) state class-table)
+                                       (get-value (operand2 expr) state class-table))))
+      ((eq? (operator expr) '*) (* (get-value (operand1 expr) state class-table)
+                                   (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '/) (floor (/ (get-value (operand1 expr) state class-table)
+                                          (get-value (operand2 expr) state class-table))))
+      ((eq? (operator expr) '%) (modulo (get-value (operand1 expr) state class-table)
+                                        (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '>) (> (get-value (operand1 expr) state class-table)
+                                   (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '<) (< (get-value (operand1 expr) state class-table)
+                                   (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '>=) (>= (get-value (operand1 expr) state class-table)
+                                     (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '<=) (<= (get-value (operand1 expr) state class-table)
+                                     (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '==) (eq? (get-value (operand1 expr) state class-table)
+                                      (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '!=) (not (eq?(get-value (operand1 expr) state class-table)
+                                          (get-value (operand2 expr) state class-table))))
+      ((eq? (operator expr) '||) (or (get-value (operand1 expr) state class-table)
+                                     (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '&&) (and (get-value (operand1 expr) state class-table)
+                                      (get-value (operand2 expr) state class-table)))
+      ((eq? (operator expr) '!) (not (get-value (operand1 expr) state class-table)))
+      (else (error "Error gettting value:" expr)))))
 
 (define atom?
   (lambda (a)
@@ -447,10 +484,10 @@
 (define finally-body cadddr)
 (define var-value-term caddr)
 (define var-name cadr)
-(define var-value (lambda (expr state) (get-value (var-value-term expr) state)))
+(define var-value (lambda (expr state class-table) (get-value (var-value-term expr) state class-table)))
 (define assign-name cadr)
 (define assign-value-term caddr)
-(define assign-value (lambda (expr state) (get-value (assign-value-term expr) state)))
+(define assign-value (lambda (expr state class-table) (get-value (assign-value-term expr) state class-table)))
 (define function-call-name cadr)
 (define function-call-args cddr)
 (define function-def-name cadr)
@@ -497,5 +534,6 @@
 (define class-def-extends (lambda (expr) (car (cdaddr expr))))
 (define class-def-body cadddr)
 (define class-call-name cadr)
-(define dot-reference cadr)
-(define dot-function caddr)
+(define dot-instance cadr)
+(define dot-member caddr)
+(define new-name car)
